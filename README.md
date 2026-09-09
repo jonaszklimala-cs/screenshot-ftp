@@ -1,0 +1,229 @@
+# screenshot-ftp
+
+Obserwuje folder (domyślnie `~/Desktop`). Gdy pojawi się nowy zrzut ekranu zrobiony
+**dowolnym programem**, plik jest wysyłany na serwer **FTP**, publiczny URL trafia do
+**schowka** i (opcjonalnie) otwiera się w **przeglądarce**.
+
+Sposoby użycia:
+
+- **Aplikacja `.app`** (zalecane) — natywna aplikacja macOS w pasku menu, uruchamiana
+  dwuklikiem, bez terminala. Patrz [sekcja 0](#0-aplikacja-app-zalecane).
+- **Menu bar ze skryptu** ([menubar.py](menubar.py)) — to samo, ale odpalane z terminala.
+- **CLI / headless** ([watcher.py](watcher.py)) — jedyna zależność to `PyYAML`
+  (konfiguracja w YAML); poza tym biblioteka standardowa Pythona 3.
+
+> **Ważne:** uruchamiaj tylko JEDEN tryb naraz. Dwa procesy obserwujące ten sam folder
+> wyślą każdy zrzut dwa razy.
+
+## 0. Aplikacja `.app` (zalecane)
+
+Aplikacja budowana jest dla **Apple Silicon (arm64)**. Intel nie jest wspierany.
+
+### Budowanie
+
+Aby powstał natywny plik arm64, potrzebny jest **universal2** Python. Na macOS jest nim
+systemowy `/usr/bin/python3` (Command Line Tools). Z niego tworzymy venv:
+
+```bash
+cd /Users/jonaszklimala/dev/screenshot-ftp
+/usr/bin/python3 -m venv .venv-u2
+.venv-u2/bin/pip install rumps py2app
+./build_app.sh
+```
+
+`build_app.sh` buduje pakiet, **ścienia** wszystkie binaria do arm64 (py2app domyślnie
+zostawia je universal2) i **podpisuje ad-hoc** (Apple Silicon nie uruchomi niepodpisanej
+binarki). Wynik:
+
+- `dist/Screenshot FTP.app` — aplikacja (arm64, ~16 MB),
+- `dist/Screenshot-FTP-arm64.zip` — spakowana do wysyłki (`ditto`, ~6,6 MB).
+
+Instalacja lokalna:
+
+```bash
+cp -R "dist/Screenshot FTP.app" /Applications/
+```
+
+> **Uwaga:** build robi się na tym Macu (Intel) dzięki temu, że universal2 Python działa
+> jako x86_64, a niesie też kod arm64. Gotowej binarki arm64 **nie da się uruchomić na
+> Intelu** — przetestujesz ją dopiero na Macu z Apple Silicon.
+
+### Wysyłka innej osobie (Apple Silicon) — obejście „nieznanego źródła"
+
+Aplikacja jest podpisana tylko **ad-hoc** (nie ma płatnego Apple Developer ID), więc
+Gatekeeper na obcym Macu nadal pokaże „z nieznanego źródła". Wyślij `Screenshot-FTP-arm64.zip`
+i przekaż odbiorcy jeden z kroków — po rozpakowaniu i przeniesieniu aplikacji:
+
+- **Terminal (najpewniej):**
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/Screenshot FTP.app"
+  ```
+  Usuwa flagę kwarantanny nadaną plikom z internetu — potem otwiera się dwuklikiem.
+- **Bez terminala:** dwuklik → blokada → **System Settings → Privacy & Security** → na dole
+  **„Open Anyway"** → potwierdź.
+
+Żeby aplikacja otwierała się **u każdego bez żadnych sztuczek**, trzeba ją podpisać
+**Developer ID + notaryzować** — wymaga konta Apple Developer (99 USD/rok). Powiedz, jeśli
+chcesz — dopiszę do builda kroki `codesign`/`notarytool`/`stapler`.
+
+### Pierwsze uruchomienie
+
+W pasku menu pojawi się ikona `SS→FTP`. Przy pierwszym starcie aplikacja utworzy plik
+konfiguracji i **sama otworzy okno Ustawienia** — uzupełnij dane FTP i publiczny URL,
+kliknij **Zapisz**, a następnie podaj hasło FTP. Gotowe.
+
+- Konfiguracja aplikacji: `~/Library/Application Support/screenshot-ftp/config.yaml`
+  (edytuj przez menu **Ustawienia…**, nie trzeba ruszać terminala).
+- macOS może poprosić o dostęp do folderu Pulpit — zezwól.
+
+### Autostart po zalogowaniu
+
+System Settings → **General → Login Items** → **+** → wskaż `Screenshot FTP.app`.
+(Nie używaj do tego plików launchd z sekcji 3 — to alternatywa dla wersji skryptowej.)
+
+## Bezpieczeństwo hasła
+
+Hasło FTP **nie jest** trzymane w `config.yaml`. Domyślnie (`ftp.use_keychain: true`) leży
+w **Keychain** macOS — zaszyfrowane, powiązane z Twoim kontem, dostępne dopiero po
+zalogowaniu. W pliku zostają tylko host, użytkownik i ścieżki.
+
+Jak ustawić / zmienić hasło:
+
+- **Aplikacja / menu bar:** menu **Ustaw hasło FTP…** (bezpieczne pole, hasło idzie prosto
+  do Keychain). Przy pierwszej konfiguracji aplikacja poprosi o nie automatycznie.
+- **Tryb CLI:**
+  ```bash
+  .venv/bin/python watcher.py set-password        # zapyta o hasło bez echa
+  ```
+
+Hasło można podejrzeć/usunąć też ręcznie w aplikacji **Pęk kluczy (Keychain Access)** —
+szukaj pozycji `screenshot-ftp`.
+
+> **Uwaga o transmisji:** Keychain chroni hasło *na dysku*. Zwykły FTP i tak przesyła je
+> **jawnie przez sieć**. Dla realnego bezpieczeństwa włącz `ftp.use_tls: true` (FTPS) lub
+> przejdź na serwer z SFTP.
+>
+> **Uwaga przy przekazywaniu aplikacji:** hasło jest w Keychain *Twojego* Maca — nie
+> „jedzie" razem z `.app`. Każdy użytkownik ustawia własne hasło u siebie (menu **Ustaw
+> hasło FTP…**).
+
+## 1. Konfiguracja
+
+```bash
+cd /Users/jonaszklimala/dev/screenshot-ftp
+cp config.example.yaml config.yaml
+```
+
+Uzupełnij `config.yaml`:
+
+| Pole | Znaczenie |
+|------|-----------|
+| `watch_dir` | Folder do obserwacji. macOS domyślnie zapisuje zrzuty na Pulpit (`~/Desktop`). |
+| `extensions` | Rozszerzenia traktowane jako zrzut. |
+| `filename_prefixes` | Opcjonalny filtr nazw (np. `["Screenshot", "Zrzut ekranu"]`). Puste = każdy obraz. |
+| `ftp.host/port/user` | Dane logowania FTP. |
+| `ftp.use_keychain` | `true` = hasło pobierane z Keychain (zalecane, brak hasła w pliku). Ustaw hasło przez menu **Ustaw hasło FTP…** lub `watcher.py set-password`. |
+| `ftp.password` | (opcjonalne, odradzane) hasło w pliku — używane tylko gdy `use_keychain` jest `false`. |
+| `ftp.remote_dir` | Katalog docelowy na serwerze (tworzony jeśli nie istnieje). |
+| `ftp.passive` | Tryb pasywny (zwykle `true`). |
+| `ftp.use_tls` | `true` = FTPS (FTP over TLS). Dla zwykłego FTP zostaw `false`. |
+| `public_base_url` | Publiczny URL odpowiadający `remote_dir` (bez końcowego `/`). |
+| `copy_url_to_clipboard` | Czy kopiować URL do schowka po wysłaniu (`pbcopy`). |
+| `open_in_browser` | Czy otwierać URL w przeglądarce po wysłaniu. |
+| `rename_pattern` | Nazwa pliku na serwerze. Zmienne: `{timestamp}`, `{ext}`, `{name}`, `{original}`. |
+| `delete_local_after_upload` | Czy kasować lokalny plik po wysłaniu. |
+
+> **Uwaga o nazwie i URL:** jeśli `remote_dir` = `/public_html/screens`, a strona serwuje
+> `public_html` jako root domeny, to `public_base_url` = `https://twojadomena/screens`.
+
+## 2a. Tryb menu bar (zalecany do codziennego użytku)
+
+Zależność `rumps` jest już zainstalowana w `.venv`. Uruchomienie:
+
+```bash
+/Users/jonaszklimala/dev/screenshot-ftp/.venv/bin/python \
+  /Users/jonaszklimala/dev/screenshot-ftp/menubar.py \
+  /Users/jonaszklimala/dev/screenshot-ftp/config.yaml
+```
+
+W pasku menu pojawi się `SS→FTP`. Menu zawiera:
+
+- status (`● Nasłuchiwanie…` / `✓ Wysłano: …` / `⏸ Wstrzymano`),
+- **Ostatnie zrzuty** — klik w pozycję ponownie kopiuje jej URL do schowka,
+- przełączniki **Kopiuj URL do schowka** i **Otwieraj w przeglądarce** (na żywo),
+- **Ustawienia…** — okno z edytorem całego `config.yaml` (patrz niżej),
+- **Ustaw hasło FTP…** — zapis hasła do Keychain (bezpieczne pole),
+- **Wstrzymaj/Wznów**, **Otwórz folder**, **Otwórz log**, **Zakończ**.
+
+### Okno Ustawienia
+
+Pozycja **Ustawienia…** otwiera okno z całą konfiguracją w formacie **YAML**. Po kliknięciu
+**Zapisz**:
+
+1. tekst jest parsowany jako YAML (błąd składni → komunikat, okno otwiera się ponownie z
+   Twoim tekstem, żeby nic nie zginęło),
+2. sprawdzane są wymagane pola (`watch_dir`, `extensions`, `public_base_url`,
+   `ftp.host/user`; hasło osobno — z Keychain lub `ftp.password`),
+3. konfiguracja jest zapisywana do `config.yaml` (atomowo; komentarze nie są zachowywane),
+4. zmiany są stosowane **od razu** — przełączniki, folder, dane FTP i interwał; watcher
+   restartuje się sam (bez potrzeby ponownego uruchamiania aplikacji).
+
+Gdyby `.venv` trzeba było odtworzyć:
+
+```bash
+cd /Users/jonaszklimala/dev/screenshot-ftp
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+## 2b. Test trybu CLI w terminalu
+
+CLI wymaga `PyYAML`, więc użyj Pythona z venv (albo `pip install pyyaml`):
+
+```bash
+.venv/bin/python /Users/jonaszklimala/dev/screenshot-ftp/watcher.py /Users/jonaszklimala/dev/screenshot-ftp/config.yaml
+```
+
+Zrób zrzut ekranu (`Cmd+Shift+4`). Powinien pojawić się w logu, trafić na FTP i otworzyć
+się w przeglądarce. Zatrzymanie: `Ctrl+C`.
+
+## 3. Autostart w tle (launchd)
+
+Wybierz **jeden** plist — dla trybu menu bar albo dla trybu headless (nie oba naraz).
+
+**Tryb menu bar** (ikona w pasku menu, autostart po zalogowaniu):
+
+```bash
+cp /Users/jonaszklimala/dev/screenshot-ftp/com.local.screenshot-ftp-menubar.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.local.screenshot-ftp-menubar.plist
+```
+
+**Tryb headless** (bez ikony, sam upload w tle):
+
+```bash
+cp /Users/jonaszklimala/dev/screenshot-ftp/com.local.screenshot-ftp.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.local.screenshot-ftp.plist
+```
+
+Od teraz proces startuje przy logowaniu i restartuje się po awarii.
+
+Zatrzymanie / wyłączenie (użyj tej samej nazwy pliku, którą załadowałeś):
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.local.screenshot-ftp-menubar.plist
+```
+
+Po zmianie `config.yaml` przeładuj (unload + load).
+
+## Logi
+
+- Log aplikacji: `~/Library/Logs/screenshot-ftp.log`
+- Wyjście launchd: `~/Library/Logs/screenshot-ftp.{out,err}.log`
+
+## Uwagi
+
+- Przy starcie skrypt ignoruje pliki już obecne w folderze — wysyła tylko **nowe**.
+- Przed wysyłką czeka, aż rozmiar pliku się ustabilizuje (plik w pełni zapisany).
+- Uprawnienia macOS: przy pierwszym uruchomieniu w tle system może poprosić o dostęp do
+  folderu Pulpit (System Settings → Privacy & Security → Files and Folders / Full Disk Access).
+- Klasyczny FTP przesyła hasło i dane bez szyfrowania. Jeśli serwer wspiera FTPS, ustaw
+  `ftp.use_tls: true`.

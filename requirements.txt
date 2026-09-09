@@ -1,0 +1,4 @@
+# PyYAML jest wymagane zawsze (konfiguracja w YAML) - dotyczy tez trybu CLI.
+PyYAML>=6.0
+# rumps tylko dla trybu menu bar (menubar.py) / aplikacji .app.
+rumps>=0.4.0

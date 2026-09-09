@@ -1,0 +1,27 @@
+# Prawdziwa konfiguracja z danymi/hasłami — NIGDY nie commitować.
+# (Do repo trafia tylko config.example.yaml)
+config.yaml
+config.yml
+config.json
+config.local.*
+
+# Wirtualne środowiska
+.venv/
+.venv-u2/
+venv/
+
+# Artefakty budowania py2app
+build/
+dist/
+*.egg-info/
+
+# Cache Pythona
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logi
+*.log
+
+# macOS
+.DS_Store
