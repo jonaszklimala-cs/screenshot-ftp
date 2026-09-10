@@ -156,14 +156,22 @@ W pasku menu pojawi się `SS→FTP`. Menu zawiera:
 
 ### Okno „Ustawienia FTP…" (formularz)
 
-Natywne okno (AppKit) z polami: **Host, Port, User, Password, Folder** (`remote_dir`),
-**Base URL** (`public_base_url`) oraz przełącznikami **Passive mode** i **TLS (FTPS)**.
+Natywne okno (AppKit) z polami: **Host, Port, User, Password, Zdalny folder**
+(`remote_dir`), **Base URL** (`public_base_url`), **Obserwuj** (`watch_dir` — folder
+śledzony pod zrzuty, z przyciskiem **Wybierz…**) oraz przełącznikami **Passive mode**,
+**TLS (FTPS)** i **Uruchamiaj przy logowaniu** (autostart).
 
 - **Test settings** — próbuje się połączyć i zalogować na podane dane (z hasłem z pola albo
   z Keychain), wynik pokazuje pod polami. Nie zapisuje niczego.
 - **Clear** — czyści pola.
-- **Zapisz** — waliduje (Host/User/Port), zapisuje do `config.yaml`, a **hasło do Keychain**
-  (pole puste = bez zmian). Zmiany działają od razu (watcher restartuje się sam).
+- **Zapisz** — waliduje (Host/User/Port), zapisuje do `config.yaml`, **hasło do Keychain**
+  (pole puste = bez zmian) i synchronizuje autostart. Zmiany działają od razu (watcher
+  restartuje się sam).
+
+**Autostart** instaluje LaunchAgent `~/Library/LaunchAgents/com.local.screenshot-ftp-app.plist`
+uruchamiający aplikację przy logowaniu (dla `.app` przez `open`; w trybie skryptu przez
+`python menubar.py`). Odznaczenie usuwa agenta. Uwaga: wpis wskazuje bieżącą lokalizację
+aplikacji — po jej przeniesieniu zaznacz autostart ponownie.
 
 Pola spoza FTP (`watch_dir`, `extensions`, `rename_pattern`, interwały) edytuje się przez
 **Ustawienia zaawansowane (YAML)…** — edytor całego pliku. Po **Zapisz** YAML jest walidowany,

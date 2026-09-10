@@ -18,6 +18,7 @@ import yaml
 import sys
 import time
 import ftplib
+import plistlib
 import subprocess
 import webbrowser
 from datetime import datetime
@@ -214,6 +215,55 @@ def needs_setup(cfg: dict) -> bool:
     if not resolve_password(cfg):
         return True
     return False
+
+
+# ---- Autostart przy logowaniu (LaunchAgent) ----
+AUTOSTART_LABEL = "com.local.screenshot-ftp-app"
+
+
+def autostart_plist_path() -> str:
+    return os.path.expanduser(f"~/Library/LaunchAgents/{AUTOSTART_LABEL}.plist")
+
+
+def autostart_enabled(path: str | None = None) -> bool:
+    return os.path.exists(path or autostart_plist_path())
+
+
+def _autostart_plist_dict(program_args: list[str]) -> dict:
+    return {
+        "Label": AUTOSTART_LABEL,
+        "ProgramArguments": list(program_args),
+        "RunAtLoad": True,
+        "ProcessType": "Interactive",
+    }
+
+
+def set_autostart(enabled: bool, program_args: list[str] | None = None, *,
+                  path: str | None = None, run_launchctl: bool = True) -> bool:
+    """Wlacza/wylacza autostart przez LaunchAgent w ~/Library/LaunchAgents.
+
+    Przy wlaczaniu wymaga program_args (czym uruchomic aplikacje). Zwraca True,
+    gdy stan pliku zgadza sie z zadaniem (blad launchctl nie jest krytyczny -
+    plist i tak zadziala przy nastepnym logowaniu).
+    """
+    p = path or autostart_plist_path()
+    if enabled:
+        if not program_args:
+            return False
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            plistlib.dump(_autostart_plist_dict(program_args), f)
+        if run_launchctl:
+            subprocess.run(["launchctl", "load", "-w", p],
+                           capture_output=True)
+        return os.path.exists(p)
+    else:
+        if os.path.exists(p):
+            if run_launchctl:
+                subprocess.run(["launchctl", "unload", "-w", p],
+                               capture_output=True)
+            os.remove(p)
+        return not os.path.exists(p)
 
 
 class Logger:

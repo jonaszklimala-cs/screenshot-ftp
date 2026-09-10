@@ -12,9 +12,13 @@ from __future__ import annotations
 
 import threading
 
-from Foundation import NSObject, NSMakeRect
+import os
+import sys
+
+from Foundation import NSObject, NSMakeRect, NSBundle
 from AppKit import (
     NSWindow, NSView, NSTextField, NSSecureTextField, NSButton, NSApp,
+    NSOpenPanel, NSModalResponseOK,
     NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
     NSBackingStoreBuffered, NSSwitchButton, NSBezelStyleRounded,
     NSTextAlignmentRight, NSFont, NSColor,
@@ -26,11 +30,11 @@ import watcher as core
 
 
 # --- geometria ---
-W = 470            # szerokosc okna
+W = 500             # szerokosc okna
 LABEL_X = 16
-LABEL_W = 92
-FIELD_X = 116
-FIELD_W = 320
+LABEL_W = 108
+FIELD_X = 132
+FIELD_W = 336
 ROW_H = 24
 ROW_STEP = 34
 PAD = 18
@@ -69,8 +73,8 @@ class SettingsController(NSObject):
         return f
 
     @objc.python_method
-    def _checkbox(self, container, x, y, title):
-        b = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, 150, ROW_H))
+    def _checkbox(self, container, x, y, title, width=150):
+        b = NSButton.alloc().initWithFrame_(NSMakeRect(x, y, width, ROW_H))
         b.setButtonType_(NSSwitchButton)
         b.setTitle_(title)
         container.addSubview_(b)
@@ -92,8 +96,9 @@ class SettingsController(NSObject):
     def buildWindow(self):
         ftp = self.cfg.get("ftp", {}) or {}
 
-        # liczba wierszy pol: host, port(+checkboxy), user, pass, folder, baseurl = 6
-        rows = 6
+        # wiersze: host, port(+checkboxy), user, pass, zdalny, baseurl, obserwuj,
+        # autostart = 8
+        rows = 8
         content_h = PAD + rows * ROW_STEP + 46 + PAD  # + wiersz przyciskow
         rect = NSMakeRect(0, 0, W, content_h)
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -138,8 +143,8 @@ class SettingsController(NSObject):
         except Exception:
             pass
         y += ROW_STEP
-        # Folder (remote_dir)
-        self._label(container, y, "Folder:")
+        # Zdalny folder (remote_dir)
+        self._label(container, y, "Zdalny folder:")
         self.remote_dir = self._field(container, y, FIELD_W)
         self.remote_dir.setStringValue_(str(ftp.get("remote_dir", "")))
         y += ROW_STEP
@@ -147,6 +152,18 @@ class SettingsController(NSObject):
         self._label(container, y, "Base URL:")
         self.base_url = self._field(container, y, FIELD_W)
         self.base_url.setStringValue_(str(self.cfg.get("public_base_url", "")))
+        y += ROW_STEP
+        # Obserwowany folder (watch_dir) + przycisk wyboru
+        self._label(container, y, "Obserwuj:")
+        self.watch_dir = self._field(container, y, FIELD_W - 92)
+        self.watch_dir.setStringValue_(str(self.cfg.get("watch_dir", "")))
+        self._button(container, FIELD_X + FIELD_W - 84, y - 3, 84,
+                     "Wybierz…", "chooseFolder:")
+        y += ROW_STEP
+        # Autostart przy logowaniu
+        self.autostart = self._checkbox(container, FIELD_X, y,
+                                        "Uruchamiaj przy logowaniu", width=260)
+        self.autostart.setState_(1 if core.autostart_enabled() else 0)
         y += ROW_STEP
 
         # status (komunikat testu)
@@ -203,6 +220,22 @@ class SettingsController(NSObject):
         self.status.setTextColor_(
             NSColor.systemRedColor() if error else NSColor.secondaryLabelColor())
 
+    @objc.python_method
+    def _launch_args(self):
+        """Komenda, ktora LaunchAgent ma uruchamiac przy logowaniu.
+
+        W wersji .app -> `open <bundle>`; w trybie skryptu -> python menubar.py cfg.
+        Rozroznienie po sys.frozen, ktore py2app ustawia tylko w spakowanej aplikacji
+        (unikamy falszywego wykrycia Python.app systemowego interpretera).
+        """
+        if getattr(sys, "frozen", None):
+            bpath = NSBundle.mainBundle().bundlePath() or ""
+            if bpath.endswith(".app"):
+                return ["/usr/bin/open", bpath]
+        menubar_py = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "menubar.py")
+        return [sys.executable, menubar_py, self.cfg_path]
+
     # --- akcje (selektory ObjC) ---
     def save_(self, sender):
         ftp, port = self._collect_ftp()
@@ -216,6 +249,9 @@ class SettingsController(NSObject):
         new_cfg = dict(self.cfg)
         new_cfg["ftp"] = ftp
         new_cfg["public_base_url"] = str(self.base_url.stringValue()).strip()
+        watch = str(self.watch_dir.stringValue()).strip()
+        if watch:
+            new_cfg["watch_dir"] = watch
 
         try:
             core.save_config(self.cfg_path, new_cfg)
@@ -231,9 +267,25 @@ class SettingsController(NSObject):
                                  "zapisać w Keychain.", error=True)
                 return
 
+        # autostart — zsynchronizuj z checkboxem (tylko gdy stan sie zmienil)
+        want_autostart = bool(self.autostart.state())
+        if want_autostart != core.autostart_enabled():
+            core.set_autostart(want_autostart, self._launch_args())
+
         self.cfg = new_cfg
         self.app.apply_new_config(new_cfg)
         self.window.close()
+
+    def chooseFolder_(self, sender):
+        panel = NSOpenPanel.openPanel()
+        panel.setCanChooseDirectories_(True)
+        panel.setCanChooseFiles_(False)
+        panel.setAllowsMultipleSelection_(False)
+        panel.setPrompt_("Wybierz")
+        if panel.runModal() == NSModalResponseOK:
+            urls = panel.URLs()
+            if urls and len(urls):
+                self.watch_dir.setStringValue_(urls[0].path())
 
     def clearFields_(self, sender):
         for f in (self.host, self.user, self.remote_dir, self.base_url,
