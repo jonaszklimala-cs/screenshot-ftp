@@ -41,8 +41,8 @@ OPTIONS = {
         "CFBundleName": "Screenshot FTP",
         "CFBundleDisplayName": "Screenshot FTP",
         "CFBundleIdentifier": "com.local.screenshot-ftp",
-        "CFBundleVersion": "1.0.0",
-        "CFBundleShortVersionString": "1.0.0",
+        "CFBundleVersion": "1.0.1",
+        "CFBundleShortVersionString": "1.0.1",
         # Aplikacja tylko w pasku menu - bez ikony w Docku i bez okna glownego.
         "LSUIElement": True,
         "NSHumanReadableCopyright": "",

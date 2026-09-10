@@ -67,6 +67,11 @@ Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zacho
 
 ## Historia wersji
 
+### v1.0.1
+- Śledzenie folderu **zdarzeniowe** (kqueue) zamiast odpytywania — zero wybudzeń
+  w bezczynności, oszczędza baterię. Polling pozostaje jako tryb zapasowy.
+- Lżejszy pakiet (mniej modułów, `optimize=2`): ~22 MB, nieco mniej RAM.
+
 ### v1.0.0
 - Obserwacja folderu i automatyczna wysyłka zrzutów na FTP.
 - Kopiowanie publicznego URL do schowka + otwieranie w przeglądarce.
@@ -77,4 +82,4 @@ Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zacho
 
 ---
 
-<sub>Budowanie ze źródeł: `./build_app.sh` (wymaga venv z universal2 Pythona — `/usr/bin/python3` — z `rumps`, `py2app`, `pyyaml`). Wydania powstają automatycznie z tagów `vX.Y.Z` przez GitHub Actions.</sub>
+<sub>Budowanie ze źródeł: `./build_app.sh` (wymaga venv z universal2 Pythona — `/usr/bin/python3` — z `rumps`, `py2app`, `pyyaml`).</sub>
