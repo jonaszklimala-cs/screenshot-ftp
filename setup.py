@@ -26,6 +26,17 @@ OPTIONS = {
     "arch": APP_ARCH,               # arm64 = natywnie na Apple Silicon
     "packages": ["rumps", "yaml"],
     "includes": ["watcher", "settings_window"],  # lokalne moduly
+    "optimize": 2,                  # bytecode -OO (usuwa docstringi/asserty)
+    # Odchudzenie pakietu: wyklucz nieuzywane, ciezkie moduly (mniejszy bundle,
+    # mniej ladowania przy starcie). Nic z tego nie jest importowane przez aplikacje.
+    "excludes": [
+        "tkinter", "Tkinter", "turtle", "turtledemo",
+        "test", "unittest", "doctest",
+        "lib2to3", "pydoc", "pydoc_data", "idlelib",
+        "ensurepip", "pip", "setuptools", "wheel", "pkg_resources",
+        "distutils", "venv",
+        "sqlite3", "xmlrpc", "pdb", "curses",
+    ],
     "plist": {
         "CFBundleName": "Screenshot FTP",
         "CFBundleDisplayName": "Screenshot FTP",

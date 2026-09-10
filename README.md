@@ -56,7 +56,7 @@ których nie ma w formularzu:
 |------|-----------|
 | `extensions` | Rozszerzenia traktowane jako zrzut (np. `[".png", ".jpg"]`). |
 | `filename_prefixes` | Filtr nazw (np. `["Screenshot", "Zrzut ekranu"]`); puste = każdy obraz. |
-| `poll_interval_seconds` | Jak często sprawdzać folder. |
+| `poll_interval_seconds` | Odstęp trybu zapasowego. Normalnie folder jest śledzony zdarzeniowo (kqueue, bez odpytywania); ta wartość działa tylko w fallbacku i jako odstęp sprawdzania stabilności pliku. |
 | `stable_checks` | Ile odczytów stałego rozmiaru, zanim plik zostanie wysłany. |
 | `rename_pattern` | Nazwa pliku na serwerze. Zmienne: `{timestamp}`, `{ext}`, `{name}`, `{original}`. |
 | `copy_url_to_clipboard` / `open_in_browser` | Co zrobić po wysłaniu. |

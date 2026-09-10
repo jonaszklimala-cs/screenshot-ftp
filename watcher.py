@@ -18,6 +18,7 @@ import yaml
 import sys
 import time
 import ftplib
+import select
 import plistlib
 import subprocess
 import webbrowser
@@ -402,9 +403,16 @@ class Watcher:
         self.interval = float(cfg.get("poll_interval_seconds", 1.0))
         self._stop = False
         self.seen: set[str] = set()
+        self._wake_w: int | None = None  # koniec self-pipe do wybudzenia kqueue
 
     def stop(self) -> None:
         self._stop = True
+        # wybudz watek zablokowany w kqueue (jesli dziala tryb zdarzeniowy)
+        if self._wake_w is not None:
+            try:
+                os.write(self._wake_w, b"x")
+            except OSError:
+                pass
 
     def _process(self, path: str) -> str | None:
         cfg = self.cfg
@@ -470,11 +478,99 @@ class Watcher:
             raise SystemExit(1)
         # nie wysylaj tego, co bylo przed startem
         self.seen = set(os.listdir(self.watch_dir))
-        self.log.log(f"Start. Obserwuje: {self.watch_dir} (co {self.interval}s). "
+        self.log.log(f"Start. Obserwuje: {self.watch_dir}. "
                      f"Zignorowano {len(self.seen)} istniejacych plikow.")
+        # Tryb zdarzeniowy (kqueue) = zero wybudzen w bezczynnosci (oszczedza baterie).
+        # Gdy sie nie powiedzie (np. dysk sieciowy) -> fallback na polling.
+        if not self._run_kqueue():
+            self.log.log("kqueue niedostepne — tryb pollingu "
+                         f"(co {self.interval}s).")
+            self._run_poll()
+
+    def _run_poll(self) -> None:
+        """Zapasowy tryb: cykliczne skanowanie (jak dotychczas)."""
         while not self._stop:
             self.scan_once()
             time.sleep(self.interval)
+
+    def _run_kqueue(self) -> bool:
+        """Tryb zdarzeniowy: watek spi w jadrze do czasu realnej zmiany w folderze.
+
+        Zwraca False, gdy nie udalo sie zainicjowac (wtedy wywolujacy robi fallback).
+        """
+        open_flags = getattr(os, "O_EVTONLY", os.O_RDONLY)
+        try:
+            dir_fd = os.open(self.watch_dir, open_flags)
+        except OSError as e:
+            self.log.log(f"kqueue: nie moge otworzyc folderu: {e}")
+            return False
+
+        wake_r, wake_w = os.pipe()
+        self._wake_w = wake_w
+        try:
+            kq = select.kqueue()
+        except Exception as e:  # noqa
+            self.log.log(f"kqueue: init nieudany: {e}")
+            os.close(dir_fd); os.close(wake_r); os.close(wake_w)
+            self._wake_w = None
+            return False
+
+        vnode_flags = (select.KQ_NOTE_WRITE | select.KQ_NOTE_EXTEND
+                       | select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME
+                       | select.KQ_NOTE_ATTRIB)
+        vnode_ev = select.kevent(
+            dir_fd, filter=select.KQ_FILTER_VNODE,
+            flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR, fflags=vnode_flags)
+        pipe_ev = select.kevent(
+            wake_r, filter=select.KQ_FILTER_READ, flags=select.KQ_EV_ADD)
+
+        try:
+            kq.control([vnode_ev, pipe_ev], 0, 0)  # rejestracja, bez czekania
+            # jednorazowy skan na wypadek pliku dodanego tuz po seed
+            self.scan_once()
+            while not self._stop:
+                events = kq.control(None, 8, None)  # blokuje do zdarzenia
+                if self._stop:
+                    break
+                reopen = False
+                fs_changed = False
+                for ev in events:
+                    if ev.ident == dir_fd:
+                        fs_changed = True
+                        if ev.fflags & (select.KQ_NOTE_DELETE
+                                        | select.KQ_NOTE_RENAME):
+                            reopen = True
+                    # ev.ident == wake_r -> tylko wybudzenie (stop)
+                if fs_changed:
+                    self.scan_once()
+                if reopen:
+                    # folder przeniesiony/usuniety -> sprobuj otworzyc ponownie
+                    try:
+                        os.close(dir_fd)
+                        dir_fd = os.open(self.watch_dir, open_flags)
+                        kq.control([select.kevent(
+                            dir_fd, filter=select.KQ_FILTER_VNODE,
+                            flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
+                            fflags=vnode_flags)], 0, 0)
+                        self.scan_once()
+                    except OSError as e:
+                        self.log.log(f"kqueue: folder zniknal ({e}) — fallback.")
+                        return False
+        except Exception as e:  # noqa
+            self.log.log(f"kqueue: blad petli ({e}) — fallback na polling.")
+            return False
+        finally:
+            for fd in (dir_fd, wake_r, wake_w):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            self._wake_w = None
+            try:
+                kq.close()
+            except Exception:
+                pass
+        return True
 
 
 def resolve_config_path() -> str:
