@@ -1,0 +1,77 @@
+name: Build & Release
+
+# Buduje aplikację (.app, universal2) i publikuje ją w GitHub Release.
+# - push taga vX.Y.Z  -> build + wgranie zip do release o tym tagu
+# - workflow_dispatch -> build + artefakt do pobrania (bez tworzenia release), do testów
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # Intel runner = wierne odtworzenie lokalnego setupu (universal2 python z CLT,
+    # te same koła pip -> spójny universal2, jak w build_app.sh).
+    runs-on: macos-13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build universal2 .app
+        run: |
+          set -euxo pipefail
+          /usr/bin/python3 --version
+          /usr/bin/python3 -m venv .venv-u2
+          .venv-u2/bin/pip install --upgrade pip
+          .venv-u2/bin/pip install -r requirements.txt py2app
+          ./build_app.sh
+
+      - name: Verify universal2 (fail jeśli coś jednoarchitekturowe)
+        run: |
+          set -euo pipefail
+          APP="dist/Screenshot FTP.app"
+          MAIN="$APP/Contents/MacOS/Screenshot FTP"
+          echo "main: $(lipo -archs "$MAIN")"
+          test "$(lipo -archs "$MAIN")" = "x86_64 arm64"
+          bad=0
+          while IFS= read -r f; do
+            a=$(lipo -archs "$f" 2>/dev/null) || continue
+            if echo "$a" | grep -q x86_64 && echo "$a" | grep -q arm64; then
+              continue
+            fi
+            echo "NIEUNIWERSALNY: ${f#$APP/} [$a]"; bad=$((bad+1))
+          done < <(find "$APP" -type f \( -perm -u+x -o -name "*.so" -o -name "*.dylib" -o -name Python \))
+          echo "jednoarchitekturowych: $bad"
+          test "$bad" -eq 0
+          codesign --verify --deep --strict "$APP"
+
+      - name: Publish to release (tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          ASSET="dist/Screenshot-FTP-universal2.zip#Screenshot FTP (macOS, universal2)"
+          # utwórz release dla taga; jeśli już istnieje — tylko wgraj/zastąp plik
+          if ! gh release create "$TAG" "$ASSET" \
+                --title "Screenshot FTP $TAG" \
+                --notes "Zbudowano automatycznie z taga $TAG (universal2: Intel + Apple Silicon).
+
+          Rozpakuj, przenieś do /Applications. Podpis ad-hoc — przy pierwszym uruchomieniu:
+          \`xattr -dr com.apple.quarantine \"/Applications/Screenshot FTP.app\"\`"; then
+            gh release upload "$TAG" "dist/Screenshot-FTP-universal2.zip" --clobber
+          fi
+
+      - name: Upload artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Screenshot-FTP-universal2
+          path: dist/Screenshot-FTP-universal2.zip
+          if-no-files-found: error
