@@ -1,0 +1,68 @@
+name: Build Windows
+
+# Jednorazowy/na żądanie build wersji Windows (.exe) na runnerze windows-latest.
+# - workflow_dispatch -> artefakt do pobrania z biegu
+# - push taga win-vX.Y.Z -> dodatkowo Release z .exe
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "win-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-win.txt pyinstaller
+
+      - name: Build exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name "Screenshot FTP"
+          --paths . --paths windows
+          --collect-all keyring
+          --collect-all pystray
+          --collect-all watchdog
+          --hidden-import watcher
+          --hidden-import paths_win
+          --hidden-import secrets_win
+          --hidden-import autostart_win
+          --hidden-import settings_win
+          windows/app_win.py
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path "dist/Screenshot FTP.exe" -DestinationPath "dist/Screenshot-FTP-Windows.zip" -Force
+
+      - name: Upload artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Screenshot-FTP-Windows
+          path: dist/Screenshot-FTP-Windows.zip
+          if-no-files-found: error
+
+      - name: Publish release (tag win-v*)
+        if: startsWith(github.ref, 'refs/tags/win-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$env:GITHUB_REF_NAME"
+          "dist/Screenshot-FTP-Windows.zip#Screenshot FTP (Windows)"
+          --title "Screenshot FTP $env:GITHUB_REF_NAME (Windows)"
+          --notes "Build Windows. Niepodpisany — przy SmartScreen: More info -> Run anyway. Ustawienia: ikona w zasobniku -> Ustawienia FTP."

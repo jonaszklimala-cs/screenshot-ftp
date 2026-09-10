@@ -333,9 +333,12 @@ def remote_name(local_name: str, cfg: dict) -> str:
     )
 
 
-def ftp_connect(cfg: dict, log: Logger, timeout: int = 30):
+def ftp_connect(cfg: dict, log: Logger, timeout: int = 30, password: str | None = None):
     f = cfg["ftp"]
-    password = resolve_password(cfg)
+    # password podany jawnie (np. z Windows Credential Manager) ma pierwszenstwo;
+    # inaczej rozwiazujemy przez Keychain/plik (macOS).
+    if password is None:
+        password = resolve_password(cfg)
     if not password:
         raise RuntimeError(
             "Brak hasła FTP. Ustaw je w menu „Ustaw hasło FTP…” "
@@ -362,10 +365,11 @@ def ftp_connect(cfg: dict, log: Logger, timeout: int = 30):
     return conn
 
 
-def upload(cfg: dict, local_path: str, log: Logger) -> str | None:
+def upload(cfg: dict, local_path: str, log: Logger,
+           password: str | None = None) -> str | None:
     rname = remote_name(os.path.basename(local_path), cfg)
     try:
-        conn = ftp_connect(cfg, log)
+        conn = ftp_connect(cfg, log, password=password)
     except Exception as e:
         log.log(f"BLAD polaczenia FTP: {e}")
         return None
