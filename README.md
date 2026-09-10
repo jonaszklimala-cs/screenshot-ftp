@@ -36,7 +36,7 @@ Menu paska → **Ustawienia FTP…** otwiera okno z polami:
 | Pole | Znaczenie |
 |------|-----------|
 | **Host / Port / User / Password** &ast; | Dane logowania FTP (hasło → Keychain; puste = bez zmian). |
-| **Zdalny folder** | Katalog docelowy na serwerze (tworzony, jeśli nie istnieje). |
+| **Zdalny folder** &ast; | Katalog docelowy na serwerze (tworzony, jeśli nie istnieje). |
 | **Base URL** &ast; | Publiczny adres odpowiadający zdalnemu folderowi (bez końcowego `/`). |
 | **Obserwuj** | Folder śledzony pod zrzuty (przycisk **Wybierz…** otwiera wybór folderu). |
 | **Passive mode / TLS (FTPS)** | Tryb pasywny i szyfrowanie połączenia. |
