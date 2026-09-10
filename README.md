@@ -150,22 +150,24 @@ W pasku menu pojawi się `SS→FTP`. Menu zawiera:
 - status (`● Nasłuchiwanie…` / `✓ Wysłano: …` / `⏸ Wstrzymano`),
 - **Ostatnie zrzuty** — klik w pozycję ponownie kopiuje jej URL do schowka,
 - przełączniki **Kopiuj URL do schowka** i **Otwieraj w przeglądarce** (na żywo),
-- **Ustawienia…** — okno z edytorem całego `config.yaml` (patrz niżej),
-- **Ustaw hasło FTP…** — zapis hasła do Keychain (bezpieczne pole),
+- **Ustawienia FTP…** — formularz z osobnymi polami (patrz niżej),
+- **Ustawienia zaawansowane (YAML)…** — edytor całego `config.yaml`,
 - **Wstrzymaj/Wznów**, **Otwórz folder**, **Otwórz log**, **Zakończ**.
 
-### Okno Ustawienia
+### Okno „Ustawienia FTP…" (formularz)
 
-Pozycja **Ustawienia…** otwiera okno z całą konfiguracją w formacie **YAML**. Po kliknięciu
-**Zapisz**:
+Natywne okno (AppKit) z polami: **Host, Port, User, Password, Folder** (`remote_dir`),
+**Base URL** (`public_base_url`) oraz przełącznikami **Passive mode** i **TLS (FTPS)**.
 
-1. tekst jest parsowany jako YAML (błąd składni → komunikat, okno otwiera się ponownie z
-   Twoim tekstem, żeby nic nie zginęło),
-2. sprawdzane są wymagane pola (`watch_dir`, `extensions`, `public_base_url`,
-   `ftp.host/user`; hasło osobno — z Keychain lub `ftp.password`),
-3. konfiguracja jest zapisywana do `config.yaml` (atomowo; komentarze nie są zachowywane),
-4. zmiany są stosowane **od razu** — przełączniki, folder, dane FTP i interwał; watcher
-   restartuje się sam (bez potrzeby ponownego uruchamiania aplikacji).
+- **Test settings** — próbuje się połączyć i zalogować na podane dane (z hasłem z pola albo
+  z Keychain), wynik pokazuje pod polami. Nie zapisuje niczego.
+- **Clear** — czyści pola.
+- **Zapisz** — waliduje (Host/User/Port), zapisuje do `config.yaml`, a **hasło do Keychain**
+  (pole puste = bez zmian). Zmiany działają od razu (watcher restartuje się sam).
+
+Pola spoza FTP (`watch_dir`, `extensions`, `rename_pattern`, interwały) edytuje się przez
+**Ustawienia zaawansowane (YAML)…** — edytor całego pliku. Po **Zapisz** YAML jest walidowany,
+zapisywany atomowo (komentarze nie są zachowywane) i stosowany na żywo.
 
 Gdyby `.venv` trzeba było odtworzyć:
 

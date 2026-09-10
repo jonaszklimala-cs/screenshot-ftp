@@ -25,7 +25,7 @@ OPTIONS = {
     "argv_emulation": False,        # WAZNE: True potrafi zawieszac aplikacje menu bar
     "arch": APP_ARCH,               # arm64 = natywnie na Apple Silicon
     "packages": ["rumps", "yaml"],
-    "includes": ["watcher"],        # lokalny modul logiki
+    "includes": ["watcher", "settings_window"],  # lokalne moduly
     "plist": {
         "CFBundleName": "Screenshot FTP",
         "CFBundleDisplayName": "Screenshot FTP",

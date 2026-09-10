@@ -282,7 +282,7 @@ def remote_name(local_name: str, cfg: dict) -> str:
     )
 
 
-def ftp_connect(cfg: dict, log: Logger):
+def ftp_connect(cfg: dict, log: Logger, timeout: int = 30):
     f = cfg["ftp"]
     password = resolve_password(cfg)
     if not password:
@@ -290,7 +290,7 @@ def ftp_connect(cfg: dict, log: Logger):
             "Brak hasła FTP. Ustaw je w menu „Ustaw hasło FTP…” "
             "lub przez: python watcher.py set-password")
     conn = ftplib.FTP_TLS() if f.get("use_tls") else ftplib.FTP()
-    conn.connect(f["host"], int(f.get("port", 21)), timeout=30)
+    conn.connect(f["host"], int(f.get("port", 21)), timeout=timeout)
     conn.login(f["user"], password)
     if f.get("use_tls"):
         conn.prot_p()

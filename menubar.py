@@ -21,6 +21,7 @@ import rumps
 import yaml
 
 import watcher as core
+import settings_window
 
 
 class ScreenshotFTPApp(rumps.App):
@@ -71,8 +72,9 @@ class ScreenshotFTPApp(rumps.App):
             self.toggle_browser,
             self.pause_item,
             None,
-            rumps.MenuItem("Ustawienia…", callback=self._open_settings),
-            rumps.MenuItem("Ustaw hasło FTP…", callback=self._set_ftp_password),
+            rumps.MenuItem("Ustawienia FTP…", callback=self._open_ftp_form),
+            rumps.MenuItem("Ustawienia zaawansowane (YAML)…",
+                           callback=self._open_settings),
             rumps.MenuItem("Otwórz folder", callback=self._open_folder),
             rumps.MenuItem("Otwórz log", callback=self._open_log),
             None,
@@ -92,7 +94,7 @@ class ScreenshotFTPApp(rumps.App):
         rumps.alert(
             "Witaj w screenshot-ftp",
             "Aby zacząć, uzupełnij dane serwera FTP oraz publiczny adres URL.")
-        self._open_settings(None)
+        self._open_ftp_form(None)
 
     # ---- watcher ----
     def _start_watcher(self) -> None:
@@ -169,6 +171,12 @@ class ScreenshotFTPApp(rumps.App):
             self.status_item.title = "● Nasłuchiwanie…"
 
     # ---- ustawienia ----
+    def _open_ftp_form(self, _sender) -> None:
+        """Otwiera natywny formularz ustawień FTP (osobne pola)."""
+        # trzymamy referencje, inaczej okno/kontroler zostana zwolnione przez GC
+        self._settings_ctrl = settings_window.open_settings_form(
+            self, self.cfg, self.cfg_path)
+
     def _open_settings(self, _sender, prefill: str | None = None) -> None:
         """Okno edycji config.yaml (pełny YAML), z walidacją i zastosowaniem na żywo."""
         if prefill is None:
@@ -219,23 +227,25 @@ class ScreenshotFTPApp(rumps.App):
             return
 
         # 4) zastosuj na zywo
+        self.apply_new_config(new_cfg)
+
+        # Jesli haslo nie jest jeszcze w Keychain -> popros o nie od razu.
+        if core.resolve_password(self.cfg) is None:
+            self._set_ftp_password(None)
+
+    def apply_new_config(self, new_cfg: dict) -> None:
+        """Zapisuje nowa konfiguracje w pamieci i restartuje obserwacje (uzywane
+        przez okno YAML i przez formularz FTP)."""
         self.cfg = new_cfg
-        # jesli zmienil sie plik logu -> nowy Logger
-        self.log = core.Logger(self.cfg.get("log_file"))
+        self.log = core.Logger(self.cfg.get("log_file"))  # gdy zmienil sie log_file
         self.toggle_clip.state = bool(self.cfg.get("copy_url_to_clipboard", True))
         self.toggle_browser.state = bool(self.cfg.get("open_in_browser", True))
-        self.log.log("Zaktualizowano konfigurację z okna Ustawienia.")
-
-        # restart watchera, by zlapal nowy folder/FTP/interwal (o ile nie wstrzymany)
+        self.log.log("Zaktualizowano konfigurację.")
         if not self._paused:
             self.watcher.stop()
             self._start_watcher()
         rumps.notification("screenshot-ftp", "Zapisano ustawienia",
                            "Konfiguracja zaktualizowana.")
-
-        # Jesli haslo nie jest jeszcze w Keychain -> popros o nie od razu.
-        if core.resolve_password(self.cfg) is None:
-            self._set_ftp_password(None)
 
     def _set_ftp_password(self, _sender) -> None:
         """Okno z bezpiecznym polem hasla -> zapis do Keychain."""
