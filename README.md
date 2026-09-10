@@ -35,12 +35,14 @@ Menu paska → **Ustawienia FTP…** otwiera okno z polami:
 
 | Pole | Znaczenie |
 |------|-----------|
-| **Host / Port / User / Password** | Dane logowania FTP (hasło → Keychain; puste = bez zmian). |
+| **Host / Port / User / Password** &ast; | Dane logowania FTP (hasło → Keychain; puste = bez zmian). |
 | **Zdalny folder** | Katalog docelowy na serwerze (tworzony, jeśli nie istnieje). |
-| **Base URL** | Publiczny adres odpowiadający zdalnemu folderowi (bez końcowego `/`). |
+| **Base URL** &ast; | Publiczny adres odpowiadający zdalnemu folderowi (bez końcowego `/`). |
 | **Obserwuj** | Folder śledzony pod zrzuty (przycisk **Wybierz…** otwiera wybór folderu). |
 | **Passive mode / TLS (FTPS)** | Tryb pasywny i szyfrowanie połączenia. |
 | **Uruchamiaj przy logowaniu** | Autostart aplikacji (LaunchAgent). |
+
+&ast; Dane do tych pól znajdziesz w **Bitwarden**, w notatce **„Monosnap - configuration"**.
 
 Przyciski: **Testuj ustawienia** (próba połączenia, wynik pod przyciskami; nic nie
 zapisuje), **Wyczyść**, **Zapisz** (zapis + hasło do Keychain, zmiany działają od razu).
