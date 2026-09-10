@@ -99,7 +99,8 @@ class SettingsController(NSObject):
         # wiersze: host, port(+checkboxy), user, pass, zdalny, baseurl, obserwuj,
         # autostart = 8
         rows = 8
-        content_h = PAD + rows * ROW_STEP + 46 + PAD  # + wiersz przyciskow
+        # + wiersz przyciskow (2+30) + odstep (8) + status (ROW_H) + dolny margines
+        content_h = PAD + rows * ROW_STEP + (2 + 30 + 8 + ROW_H) + PAD
         rect = NSMakeRect(0, 0, W, content_h)
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             rect,
@@ -166,9 +167,17 @@ class SettingsController(NSObject):
         self.autostart.setState_(1 if core.autostart_enabled() else 0)
         y += ROW_STEP
 
-        # status (komunikat testu)
+        # wiersz przyciskow
+        by = y + 2
+        self._button(container, LABEL_X, by, 140, "Testuj ustawienia",
+                     "testSettings:")
+        self._button(container, LABEL_X + 148, by, 80, "Wyczyść", "clearFields:")
+        self._button(container, W - 96 - PAD, by, 96, "Zapisz", "save:", default=True)
+
+        # status (komunikat testu) — POD przyciskami
+        sy = by + 30 + 8
         self.status = NSTextField.alloc().initWithFrame_(
-            NSMakeRect(LABEL_X, y + 4, W - 2 * LABEL_X, ROW_H))
+            NSMakeRect(LABEL_X, sy, W - 2 * LABEL_X, ROW_H))
         self.status.setBezeled_(False)
         self.status.setDrawsBackground_(False)
         self.status.setEditable_(False)
@@ -177,12 +186,6 @@ class SettingsController(NSObject):
         self.status.setTextColor_(NSColor.secondaryLabelColor())
         self.status.setStringValue_("")
         container.addSubview_(self.status)
-
-        # wiersz przyciskow
-        by = y + 2
-        self._button(container, LABEL_X, by, 110, "Test settings", "testSettings:")
-        self._button(container, LABEL_X + 118, by, 70, "Clear", "clearFields:")
-        self._button(container, W - 96 - PAD, by, 96, "Zapisz", "save:", default=True)
 
         self.window = win
         win.center()
