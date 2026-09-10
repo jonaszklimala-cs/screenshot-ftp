@@ -1,12 +1,13 @@
 #!/bin/bash
-# Buduje natywna aplikacje macOS dla Apple Silicon: dist/Screenshot FTP.app (arm64).
+# Buduje aplikacje macOS: dist/Screenshot FTP.app
+# Domyslnie universal2 (Intel + Apple Silicon); APP_ARCH=arm64 -> tylko Apple Silicon.
 # Wymaga venv opartego na universal2 Pythonie (/usr/bin/python3) z rumps + py2app.
 # Zobacz README, sekcja 0.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 VENV="${VENV:-.venv-u2}"
-APP_ARCH="${APP_ARCH:-arm64}"
+APP_ARCH="${APP_ARCH:-universal2}"   # universal2 = Intel + Apple Silicon; APP_ARCH=arm64 zaweza
 
 if [ ! -x "$VENV/bin/python" ]; then
   echo "Brak $VENV. Utworz je z universal2 Pythona:"
@@ -40,14 +41,20 @@ if [ "$APP_ARCH" = "arm64" ] || [ "$APP_ARCH" = "x86_64" ]; then
   echo "Scieniono $count plikow."
 fi
 
+# PyYAML ma opcjonalne rozszerzenie C (_yaml), ktore pip instaluje per-architektura
+# (czesto tylko x86_64). Uzywamy wylacznie safe_load/safe_dump (czysty Python), wiec
+# usuwamy _yaml.so - PyYAML dziala wtedy identycznie na Intelu i Apple Silicon.
+echo "Usuwanie rozszerzenia C PyYAML (_yaml) — czysty Python, spojnie na obu arch…"
+find "$APP" -name "_yaml*.so" -delete -print | sed 's#^#  usunieto #' || true
+
 # Apple Silicon wymaga podpisu (min. ad-hoc), inaczej system nie uruchomi binarki.
-# lipo uniewaznil ewentualne podpisy, wiec podpisujemy ad-hoc na koniec.
+# lipo/edycje uniewaznily ewentualne podpisy, wiec podpisujemy ad-hoc na koniec.
 echo "Podpisywanie ad-hoc…"
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP" && echo "Podpis OK (ad-hoc)."
 
-# Spakuj do .zip zachowujac strukture pakietu (bezpieczna wysylka).
-ZIP="dist/Screenshot-FTP-arm64.zip"
+# Spakuj do .zip zachowujac strukture pakietu (bezpieczna wysylka). Nazwa wg architektury.
+ZIP="dist/Screenshot-FTP-${APP_ARCH}.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
 echo

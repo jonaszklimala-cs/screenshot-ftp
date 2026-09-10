@@ -12,9 +12,9 @@ import os
 
 from setuptools import setup
 
-# Docelowa architektura. Domyslnie arm64 (Apple Silicon; Intel nie jest wspierany).
-# Mozna nadpisac:  APP_ARCH=universal2 .venv/bin/python setup.py py2app
-APP_ARCH = os.environ.get("APP_ARCH", "arm64")
+# Docelowa architektura. Domyslnie universal2 (dziala na Intelu i Apple Silicon).
+# Mozna zawezic:  APP_ARCH=arm64 .venv/bin/python setup.py py2app
+APP_ARCH = os.environ.get("APP_ARCH", "universal2")
 
 APP = ["menubar.py"]
 

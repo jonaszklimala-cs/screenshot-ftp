@@ -17,26 +17,29 @@ Sposoby użycia:
 
 ## 0. Aplikacja `.app` (zalecane)
 
-Aplikacja budowana jest dla **Apple Silicon (arm64)**. Intel nie jest wspierany.
+Domyślnie budowana jako **universal2** — działa natywnie na **Intelu i Apple Silicon**.
 
 ### Budowanie
 
-Aby powstał natywny plik arm64, potrzebny jest **universal2** Python. Na macOS jest nim
+Potrzebny jest **universal2** Python (niesie kod obu architektur). Na macOS jest nim
 systemowy `/usr/bin/python3` (Command Line Tools). Z niego tworzymy venv:
 
 ```bash
 cd /Users/jonaszklimala/dev/screenshot-ftp
 /usr/bin/python3 -m venv .venv-u2
-.venv-u2/bin/pip install rumps py2app
+.venv-u2/bin/pip install rumps py2app pyyaml
 ./build_app.sh
 ```
 
-`build_app.sh` buduje pakiet, **ścienia** wszystkie binaria do arm64 (py2app domyślnie
-zostawia je universal2) i **podpisuje ad-hoc** (Apple Silicon nie uruchomi niepodpisanej
-binarki). Wynik:
+`build_app.sh` buduje pakiet, usuwa rozszerzenie C PyYAML (`_yaml`, instalowane
+per-architektura — dzięki temu YAML działa spójnie na obu) i **podpisuje ad-hoc** (Apple
+Silicon nie uruchomi niepodpisanej binarki). Wynik:
 
-- `dist/Screenshot FTP.app` — aplikacja (arm64, ~16 MB),
-- `dist/Screenshot-FTP-arm64.zip` — spakowana do wysyłki (`ditto`, ~6,6 MB).
+- `dist/Screenshot FTP.app` — aplikacja universal2 (~24 MB),
+- `dist/Screenshot-FTP-universal2.zip` — spakowana do wysyłki (`ditto`).
+
+Chcesz mniejszy pakiet tylko pod Apple Silicon? `APP_ARCH=arm64 ./build_app.sh`
+(≈16 MB; ścienia wszystko do arm64).
 
 Instalacja lokalna:
 
@@ -44,14 +47,10 @@ Instalacja lokalna:
 cp -R "dist/Screenshot FTP.app" /Applications/
 ```
 
-> **Uwaga:** build robi się na tym Macu (Intel) dzięki temu, że universal2 Python działa
-> jako x86_64, a niesie też kod arm64. Gotowej binarki arm64 **nie da się uruchomić na
-> Intelu** — przetestujesz ją dopiero na Macu z Apple Silicon.
-
-### Wysyłka innej osobie (Apple Silicon) — obejście „nieznanego źródła"
+### Wysyłka innej osobie — obejście „nieznanego źródła"
 
 Aplikacja jest podpisana tylko **ad-hoc** (nie ma płatnego Apple Developer ID), więc
-Gatekeeper na obcym Macu nadal pokaże „z nieznanego źródła". Wyślij `Screenshot-FTP-arm64.zip`
+Gatekeeper na obcym Macu nadal pokaże „z nieznanego źródła". Wyślij `Screenshot-FTP-universal2.zip`
 i przekaż odbiorcy jeden z kroków — po rozpakowaniu i przeniesieniu aplikacji:
 
 - **Terminal (najpewniej):**
