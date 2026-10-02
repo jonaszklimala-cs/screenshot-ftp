@@ -63,7 +63,7 @@ których nie ma w formularzu:
 
 Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zachowywane).
 
-WAŻNE Jeśli używasz monosnapa, pamiętaj by scereenshoty zapisywać w wybranym folderze, a nie klikać "upload"
+**WAŻNE** Jeśli używasz monosnapa, pamiętaj by scereenshoty zapisywać w wybranym folderze, a nie klikać "upload"
 
 ## Historia wersji
 
