@@ -12,8 +12,6 @@ nowy zrzut ekranu zrobiony **dowolnym programem**, wysyła go na **FTP**, kopiuj
 3. Uruchom — w pasku menu pojawi się ikona `SS→FTP`. Przy pierwszym starcie aplikacja
    sama otworzy okno **Ustawienia FTP** (patrz niżej).
 
-Konfiguracja trafia do `~/Library/Application Support/screenshot-ftp/config.yaml`,
-a hasło FTP do **Keychain** (nie do pliku).
 
 ### Obejście „z nieznanego źródła"
 
@@ -64,6 +62,8 @@ których nie ma w formularzu:
 | `log_file` | Ścieżka logu. |
 
 Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zachowywane).
+
+WAŻNE Jeśli używasz monosnapa, pamiętaj by scereenshoty zapisywać w wybranym folderze, a nie klikać "upload"
 
 ## Historia wersji
 
