@@ -3,6 +3,9 @@
 Aplikacja macOS w pasku menu. Obserwuje folder (domyślnie `~/Desktop`); gdy pojawi się
 nowy zrzut ekranu zrobiony **dowolnym programem**, wysyła go na **FTP**, kopiuje publiczny
 **URL do schowka** i (opcjonalnie) otwiera w przeglądarce.
+Dymyslenie wspierane rozszerzenia plików:
+- dla obrazów - ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".tiff", ".bmp"
+- dla wideo - ".mp4", ".mov", ".webm"
 
 ## Instalacja i pierwsze uruchomienie
 
@@ -29,32 +32,36 @@ macOS może też poprosić o dostęp do folderu Pulpit — zezwól.
 
 ## Konfiguracja — formularz
 
-Menu paska → **Ustawienia FTP…** otwiera okno z polami:
+Gdy aplikacja jest uruchomiona, znajdziesz ją na pasku menu. Kliknij w **ikonkę*** → **Ustawienia FTP…**, otwiera to okno z konfiguracją.
+Dane do pól oznaczonych &ast; znajdziesz w **Bitwarden**, w notatce **„Monosnap - configuration"**.
+
 
 | Pole | Znaczenie |
 |------|-----------|
-| **Host / Port / User / Password** &ast; | Dane logowania FTP (hasło → Keychain; puste = bez zmian). |
-| **Zdalny folder** &ast; | Katalog docelowy na serwerze (tworzony, jeśli nie istnieje). |
+| **Host / Port / User / Password** &ast; | Dane logowania FTP (hasło jest zapisywane w macOSowym Keychain). |
+| **Zdalny folder** &ast; | Katalog docelowy na serwerze Creativecast, do którego zostanie przesłany plik (jeśli katalog nie istnieje, zostanie utworzony). |
 | **Base URL** &ast; | Publiczny adres odpowiadający zdalnemu folderowi (bez końcowego `/`). |
 | **Obserwuj** | Lista folderów śledzonych pod zrzuty (jeden na linię; **Dodaj folder…** pozwala wskazać wiele naraz). |
 | **Przeszukuj podfoldery** | Gdy zaznaczone — śledzi też wszystkie podfoldery wskazanych folderów. |
 | **Passive mode / TLS (FTPS)** | Tryb pasywny i szyfrowanie połączenia. |
 | **Uruchamiaj przy logowaniu** | Autostart aplikacji (LaunchAgent). |
 
-&ast; Dane do tych pól znajdziesz w **Bitwarden**, w notatce **„Monosnap - configuration"**.
 
 Przyciski: **Testuj ustawienia** (próba połączenia, wynik pod przyciskami; nic nie
 zapisuje), **Wyczyść**, **Zapisz** (zapis + hasło do Keychain, zmiany działają od razu).
 
-## Konfiguracja zaawansowana (YAML)
+
+**WAŻNE** Jeśli używasz monosnapa, pamiętaj, by screeny i filmiki zapisywać we wskazanych w konfiguratorze folderach, a nie klikać "upload."
+
+## Konfiguracja zaawansowana (YAML) - opcjonalne, jak chcesz pogrzebać
 
 Menu → **Ustawienia zaawansowane (YAML)…** to edytor całego pliku `config.yaml` — dla pól,
 których nie ma w formularzu:
 
 | Pole | Znaczenie |
 |------|-----------|
-| `extensions` | Rozszerzenia traktowane jako zrzut (np. `[".png", ".jpg"]`). |
-| `filename_prefixes` | Filtr nazw (np. `["Screenshot", "Zrzut ekranu"]`); puste = każdy obraz. |
+| `extensions` | Tu można dodać rozszerzenia plików, które chcielibyśmy wrzucać na serwer (np. `[".png", ".jpg"]`). |
+| `filename_prefixes` | Opcjonalna reguła, poszukuje tylko plików z konkretnymi wyrazami w nazwie, np. `["Screenshot", "Zrzut ekranu"]`); puste = każdy obraz. |
 | `poll_interval_seconds` | Odstęp trybu zapasowego. Normalnie folder jest śledzony zdarzeniowo (kqueue, bez odpytywania); ta wartość działa tylko w fallbacku i jako odstęp sprawdzania stabilności pliku. |
 | `stable_checks` | Ile odczytów stałego rozmiaru, zanim plik zostanie wysłany. |
 | `rename_pattern` | Nazwa pliku na serwerze. Zmienne: `{timestamp}`, `{ext}`, `{name}`, `{original}`. |
@@ -62,9 +69,6 @@ których nie ma w formularzu:
 | `delete_local_after_upload` | Czy kasować lokalny plik po wysłaniu. |
 | `log_file` | Ścieżka logu. |
 
-Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zachowywane).
-
-**WAŻNE** Jeśli używasz monosnapa, pamiętaj by scereenshoty zapisywać w wybranym folderze, a nie klikać "upload"
 
 ## Historia wersji
 
