@@ -57,7 +57,7 @@ DEFAULT_CONFIG = {
     "watch_dirs": ["~/Desktop"],   # lista folderow do obserwacji
     "watch_recursive": False,      # True = wraz ze wszystkimi podfolderami
     "extensions": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic",
-                   ".tiff", ".bmp"],
+                   ".tiff", ".bmp", ".mp4", ".mov", ".webm"],
     "filename_prefixes": [],
     "poll_interval_seconds": 1.0,
     "stable_checks": 2,

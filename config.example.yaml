@@ -4,7 +4,7 @@
 
 watch_dirs: ["~/Desktop"]              # lista obserwowanych folderów (można podać wiele)
 watch_recursive: false                 # true = wraz ze wszystkimi podfolderami
-extensions: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".tiff", ".bmp"]
+extensions: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".tiff", ".bmp", ".mp4", ".mov", ".webm"]
 filename_prefixes: []                  # np. ["Screenshot", "Zrzut ekranu"]; puste = każdy obraz
 poll_interval_seconds: 1.0
 stable_checks: 2                       # ile odczytów stałego rozmiaru zanim wyślemy plik

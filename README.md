@@ -72,6 +72,7 @@ Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zacho
 - **Wiele obserwowanych folderów** oraz opcja **„Przeszukuj podfoldery"**
   (rekurencyjnie) — w formularzu i w configu (`watch_dirs`, `watch_recursive`).
 - Dotyczy macOS i Windows. Stary `watch_dir` nadal działa (zgodność wsteczna).
+- Domyślnie wysyłane są też pliki **wideo**: `.mp4`, `.mov`, `.webm`.
 
 ### v1.0.1
 - Śledzenie folderu **zdarzeniowe** (kqueue) zamiast odpytywania — zero wybudzeń
