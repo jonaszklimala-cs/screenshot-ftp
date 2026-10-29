@@ -79,19 +79,28 @@ class WinApp:
 
     # ---- obserwacja ----
     def start_observer(self):
-        watch = os.path.expanduser(os.path.expandvars(self.cfg["watch_dir"]))
-        try:
-            os.makedirs(watch, exist_ok=True)
-        except OSError:
-            pass
-        if not os.path.isdir(watch):
-            self.log.log(f"Folder do obserwacji nie istnieje: {watch}")
-            return
+        recursive = core.is_recursive(self.cfg)
+        dirs = [os.path.expanduser(os.path.expandvars(d))
+                for d in core.watch_dirs(self.cfg)]
         obs = Observer()
-        obs.schedule(_Handler(self), watch, recursive=False)
+        watched = []
+        for watch in dirs:
+            try:
+                os.makedirs(watch, exist_ok=True)
+            except OSError:
+                pass
+            if not os.path.isdir(watch):
+                self.log.log(f"Folder do obserwacji nie istnieje: {watch}")
+                continue
+            obs.schedule(_Handler(self), watch, recursive=recursive)
+            watched.append(watch)
+        if not watched:
+            self.log.log("Brak istniejących folderów do obserwacji.")
+            return
         obs.start()
         self.observer = obs
-        self.log.log(f"Start. Obserwuje: {watch}")
+        mode = "rekurencyjnie" if recursive else "bez podfolderów"
+        self.log.log(f"Start. Obserwuje [{mode}]: {', '.join(watched)}")
 
     def stop_observer(self):
         if self.observer is not None:
@@ -185,7 +194,10 @@ class WinApp:
         self._update_menu()
 
     def _on_open_folder(self, icon, item):
-        watch = os.path.expanduser(os.path.expandvars(self.cfg["watch_dir"]))
+        dirs = core.watch_dirs(self.cfg)
+        if not dirs:
+            return
+        watch = os.path.expanduser(os.path.expandvars(dirs[0]))
         try:
             os.startfile(watch)  # type: ignore[attr-defined]
         except Exception:

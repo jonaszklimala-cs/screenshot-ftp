@@ -279,7 +279,9 @@ class ScreenshotFTPApp(rumps.App):
 
     # ---- akcje ----
     def _open_folder(self, _sender) -> None:
-        subprocess.run(["open", core.expand(self.cfg["watch_dir"])])
+        dirs = core.watch_dirs(self.cfg)
+        if dirs:
+            subprocess.run(["open", core.expand(dirs[0])])
 
     def _open_log(self, _sender) -> None:
         lf = self.cfg.get("log_file")

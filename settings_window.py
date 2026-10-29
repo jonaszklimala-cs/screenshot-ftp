@@ -18,7 +18,7 @@ import sys
 from Foundation import NSObject, NSMakeRect, NSBundle
 from AppKit import (
     NSWindow, NSView, NSTextField, NSSecureTextField, NSButton, NSApp,
-    NSOpenPanel, NSModalResponseOK,
+    NSOpenPanel, NSModalResponseOK, NSScrollView, NSTextView, NSBezelBorder,
     NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
     NSBackingStoreBuffered, NSSwitchButton, NSBezelStyleRounded,
     NSTextAlignmentRight, NSFont, NSColor,
@@ -93,14 +93,31 @@ class SettingsController(NSObject):
         return b
 
     @objc.python_method
+    def _textarea(self, container, y, w, h):
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(FIELD_X, y, w, h))
+        scroll.setHasVerticalScroller_(True)
+        scroll.setBorderType_(NSBezelBorder)
+        tv = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, w, h))
+        tv.setFont_(NSFont.systemFontOfSize_(12))
+        try:
+            tv.setRichText_(False)
+            tv.setAutomaticQuoteSubstitutionEnabled_(False)
+        except Exception:
+            pass
+        scroll.setDocumentView_(tv)
+        container.addSubview_(scroll)
+        return tv
+
+    @objc.python_method
     def buildWindow(self):
         ftp = self.cfg.get("ftp", {}) or {}
 
-        # wiersze: host, port(+checkboxy), user, pass, zdalny, baseurl, obserwuj,
-        # autostart = 8
-        rows = 8
-        # + wiersz przyciskow (2+30) + odstep (8) + status (ROW_H) + dolny margines
-        content_h = PAD + rows * ROW_STEP + (2 + 30 + 8 + ROW_H) + PAD
+        # wiersze pol: host, port, user, pass, zdalny, baseurl = 6
+        top_rows = 6
+        watch_h = 72  # pole wielu folderow
+        # + watch (label gap + textarea) + recursive + autostart + przyciski + status
+        content_h = (PAD + top_rows * ROW_STEP + (ROW_H + watch_h)
+                     + ROW_STEP + ROW_STEP + (2 + 30) + (8 + ROW_H) + PAD)
         rect = NSMakeRect(0, 0, W, content_h)
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             rect,
@@ -154,12 +171,18 @@ class SettingsController(NSObject):
         self.base_url = self._field(container, y, FIELD_W)
         self.base_url.setStringValue_(str(self.cfg.get("public_base_url", "")))
         y += ROW_STEP
-        # Obserwowany folder (watch_dir) + przycisk wyboru
+        # Obserwowane foldery (watch_dirs) — po jednym w linii + przycisk dodawania
         self._label(container, y, "Obserwuj:")
-        self.watch_dir = self._field(container, y, FIELD_W - 92)
-        self.watch_dir.setStringValue_(str(self.cfg.get("watch_dir", "")))
-        self._button(container, FIELD_X + FIELD_W - 84, y - 3, 84,
-                     "Wybierz…", "chooseFolder:")
+        self._button(container, FIELD_X + FIELD_W - 120, y - 3, 120,
+                     "Dodaj folder…", "addFolders:")
+        y += ROW_H
+        self.watch_tv = self._textarea(container, y, FIELD_W, 72)
+        self.watch_tv.setString_("\n".join(core.watch_dirs(self.cfg)))
+        y += 72
+        # Rekurencja
+        self.recursive = self._checkbox(container, FIELD_X, y,
+                                        "Przeszukuj podfoldery", width=260)
+        self.recursive.setState_(1 if core.is_recursive(self.cfg) else 0)
         y += ROW_STEP
         # Autostart przy logowaniu
         self.autostart = self._checkbox(container, FIELD_X, y,
@@ -249,12 +272,18 @@ class SettingsController(NSObject):
             self._set_status("Port musi być liczbą.", error=True)
             return
 
+        dirs = self._watch_dirs_from_tv()
+        if not dirs:
+            self._set_status("Dodaj przynajmniej jeden folder do obserwacji.",
+                             error=True)
+            return
+
         new_cfg = dict(self.cfg)
         new_cfg["ftp"] = ftp
         new_cfg["public_base_url"] = str(self.base_url.stringValue()).strip()
-        watch = str(self.watch_dir.stringValue()).strip()
-        if watch:
-            new_cfg["watch_dir"] = watch
+        new_cfg["watch_dirs"] = dirs
+        new_cfg["watch_recursive"] = bool(self.recursive.state())
+        new_cfg.pop("watch_dir", None)  # usun stare pojedyncze pole
 
         try:
             core.save_config(self.cfg_path, new_cfg)
@@ -279,16 +308,24 @@ class SettingsController(NSObject):
         self.app.apply_new_config(new_cfg)
         self.window.close()
 
-    def chooseFolder_(self, sender):
+    @objc.python_method
+    def _watch_dirs_from_tv(self):
+        text = str(self.watch_tv.string() or "")
+        return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    def addFolders_(self, sender):
         panel = NSOpenPanel.openPanel()
         panel.setCanChooseDirectories_(True)
         panel.setCanChooseFiles_(False)
-        panel.setAllowsMultipleSelection_(False)
-        panel.setPrompt_("Wybierz")
+        panel.setAllowsMultipleSelection_(True)
+        panel.setPrompt_("Dodaj")
         if panel.runModal() == NSModalResponseOK:
-            urls = panel.URLs()
-            if urls and len(urls):
-                self.watch_dir.setStringValue_(urls[0].path())
+            dirs = self._watch_dirs_from_tv()
+            for url in (panel.URLs() or []):
+                p = url.path()
+                if p and p not in dirs:
+                    dirs.append(p)
+            self.watch_tv.setString_("\n".join(dirs))
 
     def clearFields_(self, sender):
         for f in (self.host, self.user, self.remote_dir, self.base_url,

@@ -2,7 +2,8 @@
 # Komentarze (linie z #) są dozwolone — ale UWAGA: zapis przez okno
 # "Ustawienia…" w aplikacji nadpisuje plik i usuwa komentarze.
 
-watch_dir: "~/Desktop"                 # folder obserwowany (macOS zapisuje zrzuty na Pulpit)
+watch_dirs: ["~/Desktop"]              # lista obserwowanych folderów (można podać wiele)
+watch_recursive: false                 # true = wraz ze wszystkimi podfolderami
 extensions: [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".tiff", ".bmp"]
 filename_prefixes: []                  # np. ["Screenshot", "Zrzut ekranu"]; puste = każdy obraz
 poll_interval_seconds: 1.0

@@ -54,7 +54,8 @@ def save_config(path: str, cfg: dict) -> None:
 APP_NAME = "screenshot-ftp"
 
 DEFAULT_CONFIG = {
-    "watch_dir": "~/Desktop",
+    "watch_dirs": ["~/Desktop"],   # lista folderow do obserwacji
+    "watch_recursive": False,      # True = wraz ze wszystkimi podfolderami
     "extensions": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic",
                    ".tiff", ".bmp"],
     "filename_prefixes": [],
@@ -82,6 +83,21 @@ _PLACEHOLDERS = {
     "host": ("", "ftp.example.com"),
     "public_base_url": ("", "https://example.com/screens"),
 }
+
+
+def watch_dirs(cfg: dict) -> list[str]:
+    """Lista folderow do obserwacji. Obsluguje nowe `watch_dirs` oraz stary `watch_dir`."""
+    dirs = cfg.get("watch_dirs")
+    if isinstance(dirs, list) and dirs:
+        return [str(d) for d in dirs if str(d).strip()]
+    legacy = cfg.get("watch_dir")
+    if legacy:
+        return [str(legacy)]
+    return []
+
+
+def is_recursive(cfg: dict) -> bool:
+    return bool(cfg.get("watch_recursive", False))
 
 
 def user_config_path() -> str:
@@ -113,7 +129,7 @@ def ensure_config(path: str) -> bool:
     return True
 
 
-REQUIRED_KEYS = ("watch_dir", "extensions", "public_base_url", "ftp")
+REQUIRED_KEYS = ("extensions", "public_base_url", "ftp")
 REQUIRED_FTP_KEYS = ("host", "user")  # haslo walidowane osobno (plik lub Keychain)
 
 
@@ -187,6 +203,8 @@ def validate_config(cfg: dict) -> list[str]:
     for k in REQUIRED_KEYS:
         if k not in cfg:
             errors.append(f"Brak wymaganego pola: {k}")
+    if not watch_dirs(cfg):
+        errors.append("Brak folderów do obserwacji (pole 'watch_dirs').")
     if "extensions" in cfg and not isinstance(cfg["extensions"], list):
         errors.append("Pole 'extensions' musi być listą (np. [\".png\"]).")
     ftp = cfg.get("ftp")
@@ -403,11 +421,15 @@ class Watcher:
         self.cfg = cfg
         self.log = log
         self.on_upload = on_upload
-        self.watch_dir = expand(cfg["watch_dir"])
+        self.roots = [expand(d) for d in watch_dirs(cfg)]
+        self.recursive = is_recursive(cfg)
         self.interval = float(cfg.get("poll_interval_seconds", 1.0))
         self._stop = False
-        self.seen: set[str] = set()
-        self._wake_w: int | None = None  # koniec self-pipe do wybudzenia kqueue
+        self.seen: dict[str, set[str]] = {}       # dirpath -> znane nazwy plikow
+        self._fd_to_dir: dict[int, str] = {}
+        self._dir_to_fd: dict[str, int] = {}
+        self._fd_warned = False
+        self._wake_w: int | None = None           # self-pipe do wybudzenia kqueue
 
     def stop(self) -> None:
         self._stop = True
@@ -417,6 +439,14 @@ class Watcher:
                 os.write(self._wake_w, b"x")
             except OSError:
                 pass
+
+    # ---- pomocnicze: iteracja folderow (z rekurencja lub bez) ----
+    def _dirs_of_root(self, root: str):
+        if self.recursive:
+            for dirpath, _dirs, _files in os.walk(root):
+                yield dirpath
+        else:
+            yield root
 
     def _process(self, path: str) -> str | None:
         cfg = self.cfg
@@ -452,119 +482,187 @@ class Watcher:
                 self.log.log(f"BLAD callbacku on_upload: {e}")
         return url
 
-    def scan_once(self) -> None:
+    def _process_existing_as_new(self, dirpath: str) -> None:
+        """Przetwarza obrazy znajdujace sie juz w (nowo pojawionym) folderze."""
         try:
-            current = set(os.listdir(self.watch_dir))
-        except OSError as e:
-            self.log.log(f"Blad odczytu folderu: {e}")
+            names = os.listdir(dirpath)
+        except OSError:
             return
-        new_files = current - self.seen
-        for name in sorted(new_files):
-            self.seen.add(name)
+        for name in sorted(names):
             if name.startswith("."):
                 continue
-            if not matches(name, self.cfg):
+            full = os.path.join(dirpath, name)
+            if os.path.isfile(full) and matches(name, self.cfg):
+                self.log.log(f"Nowy zrzut: {name}")
+                try:
+                    self._process(full)
+                except Exception as e:
+                    self.log.log(f"BLAD przetwarzania {name}: {e}")
+
+    def _scan_dir(self, dirpath: str) -> list[str]:
+        """Porownuje zawartosc folderu ze stanem `seen`, przetwarza nowe pliki.
+
+        Zwraca liste nowo powstalych podfolderow (do rejestracji w trybie rekurencyjnym).
+        """
+        try:
+            current = set(os.listdir(dirpath))
+        except OSError as e:
+            self.log.log(f"Blad odczytu folderu {dirpath}: {e}")
+            return []
+        prev = self.seen.get(dirpath, set())
+        new = current - prev
+        self.seen[dirpath] = current
+        new_subdirs: list[str] = []
+        for name in sorted(new):
+            if name.startswith("."):
                 continue
-            full = os.path.join(self.watch_dir, name)
-            if not os.path.isfile(full):
+            full = os.path.join(dirpath, name)
+            try:
+                if os.path.isdir(full):
+                    if self.recursive:
+                        new_subdirs.append(full)
+                    continue
+                if not os.path.isfile(full):
+                    continue
+            except OSError:
+                continue
+            if not matches(name, self.cfg):
                 continue
             self.log.log(f"Nowy zrzut: {name}")
             try:
                 self._process(full)
             except Exception as e:
                 self.log.log(f"BLAD przetwarzania {name}: {e}")
-        # usun z 'seen' pliki ktore zniknely (by ponowny plik o tej nazwie zadzialal)
-        self.seen &= current | new_files
+        return new_subdirs
 
     def run(self) -> None:
-        if not os.path.isdir(self.watch_dir):
-            self.log.log(f"Folder do obserwacji nie istnieje: {self.watch_dir}")
-            raise SystemExit(1)
-        # nie wysylaj tego, co bylo przed startem
-        self.seen = set(os.listdir(self.watch_dir))
-        self.log.log(f"Start. Obserwuje: {self.watch_dir}. "
-                     f"Zignorowano {len(self.seen)} istniejacych plikow.")
+        existing = [r for r in self.roots if os.path.isdir(r)]
+        for r in self.roots:
+            if not os.path.isdir(r):
+                self.log.log(f"Folder do obserwacji nie istnieje: {r}")
+        # nie wysylaj tego, co bylo przed startem — seeduj znane dirs
+        for root in existing:
+            for d in self._dirs_of_root(root):
+                try:
+                    self.seen[d] = set(os.listdir(d))
+                except OSError:
+                    self.seen[d] = set()
+        mode = "rekurencyjnie" if self.recursive else "bez podfolderow"
+        self.log.log(f"Start. Obserwuje {len(existing)} folder(ow) [{mode}]: "
+                     f"{', '.join(existing) if existing else '(brak)'}")
         # Tryb zdarzeniowy (kqueue) = zero wybudzen w bezczynnosci (oszczedza baterie).
-        # Gdy sie nie powiedzie (np. dysk sieciowy) -> fallback na polling.
-        if not self._run_kqueue():
-            self.log.log("kqueue niedostepne — tryb pollingu "
-                         f"(co {self.interval}s).")
-            self._run_poll()
+        if existing and self._run_kqueue():
+            return
+        self.log.log(f"Tryb pollingu (co {self.interval}s).")
+        self._run_poll()
 
     def _run_poll(self) -> None:
-        """Zapasowy tryb: cykliczne skanowanie (jak dotychczas)."""
+        """Zapasowy tryb: cykliczne skanowanie wszystkich folderow (i podfolderow)."""
         while not self._stop:
-            self.scan_once()
+            for root in self.roots:
+                if not os.path.isdir(root):
+                    continue
+                for d in self._dirs_of_root(root):
+                    self._scan_dir(d)  # nowe podfoldery zlapie kolejny obchod walk
             time.sleep(self.interval)
 
-    def _run_kqueue(self) -> bool:
-        """Tryb zdarzeniowy: watek spi w jadrze do czasu realnej zmiany w folderze.
+    def _register_dir(self, kq, open_flags: int, vnode_flags: int,
+                      dirpath: str) -> None:
+        """Otwiera fd folderu i rejestruje go w kqueue (jesli jeszcze nie)."""
+        if dirpath in self._dir_to_fd:
+            return
+        try:
+            fd = os.open(dirpath, open_flags)
+        except OSError as e:
+            if not self._fd_warned:
+                self.log.log(f"kqueue: nie moge obserwowac {dirpath}: {e}")
+                self._fd_warned = True
+            return
+        try:
+            kq.control([select.kevent(
+                fd, filter=select.KQ_FILTER_VNODE,
+                flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
+                fflags=vnode_flags)], 0, 0)
+        except OSError:
+            os.close(fd)
+            return
+        self._fd_to_dir[fd] = dirpath
+        self._dir_to_fd[dirpath] = fd
+        self.seen.setdefault(dirpath, set(os.listdir(dirpath))
+                             if os.path.isdir(dirpath) else set())
 
-        Zwraca False, gdy nie udalo sie zainicjowac (wtedy wywolujacy robi fallback).
+    def _unregister_fd(self, fd: int) -> None:
+        dirpath = self._fd_to_dir.pop(fd, None)
+        if dirpath is not None:
+            self._dir_to_fd.pop(dirpath, None)
+            self.seen.pop(dirpath, None)
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+    def _run_kqueue(self) -> bool:
+        """Tryb zdarzeniowy: watek spi w jadrze do czasu realnej zmiany w folderach.
+
+        Obsluguje wiele folderow i rekurencje (fd na kazdy katalog, dynamiczna
+        rejestracja nowo powstalych podfolderow). Zwraca False przy bledzie init.
         """
         open_flags = getattr(os, "O_EVTONLY", os.O_RDONLY)
-        try:
-            dir_fd = os.open(self.watch_dir, open_flags)
-        except OSError as e:
-            self.log.log(f"kqueue: nie moge otworzyc folderu: {e}")
-            return False
-
-        wake_r, wake_w = os.pipe()
-        self._wake_w = wake_w
+        vnode_flags = (select.KQ_NOTE_WRITE | select.KQ_NOTE_EXTEND
+                       | select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME
+                       | select.KQ_NOTE_ATTRIB)
         try:
             kq = select.kqueue()
         except Exception as e:  # noqa
             self.log.log(f"kqueue: init nieudany: {e}")
-            os.close(dir_fd); os.close(wake_r); os.close(wake_w)
-            self._wake_w = None
             return False
 
-        vnode_flags = (select.KQ_NOTE_WRITE | select.KQ_NOTE_EXTEND
-                       | select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME
-                       | select.KQ_NOTE_ATTRIB)
-        vnode_ev = select.kevent(
-            dir_fd, filter=select.KQ_FILTER_VNODE,
-            flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR, fflags=vnode_flags)
-        pipe_ev = select.kevent(
-            wake_r, filter=select.KQ_FILTER_READ, flags=select.KQ_EV_ADD)
-
+        wake_r, wake_w = os.pipe()
+        self._wake_w = wake_w
+        self._fd_to_dir.clear()
+        self._dir_to_fd.clear()
         try:
-            kq.control([vnode_ev, pipe_ev], 0, 0)  # rejestracja, bez czekania
-            # jednorazowy skan na wypadek pliku dodanego tuz po seed
-            self.scan_once()
+            kq.control([select.kevent(
+                wake_r, filter=select.KQ_FILTER_READ,
+                flags=select.KQ_EV_ADD)], 0, 0)
+            # zarejestruj wszystkie istniejace foldery
+            for root in self.roots:
+                if os.path.isdir(root):
+                    for d in self._dirs_of_root(root):
+                        self._register_dir(kq, open_flags, vnode_flags, d)
+            # jednorazowy skan (plik dodany tuz po seed)
+            for dirpath in list(self._dir_to_fd):
+                for sd in self._scan_dir(dirpath):
+                    self._add_subtree(kq, open_flags, vnode_flags, sd)
+
             while not self._stop:
-                events = kq.control(None, 8, None)  # blokuje do zdarzenia
+                events = kq.control(None, 16, None)  # blokuje do zdarzenia
                 if self._stop:
                     break
-                reopen = False
-                fs_changed = False
+                changed: set[str] = set()
+                gone: list[int] = []
                 for ev in events:
-                    if ev.ident == dir_fd:
-                        fs_changed = True
-                        if ev.fflags & (select.KQ_NOTE_DELETE
-                                        | select.KQ_NOTE_RENAME):
-                            reopen = True
-                    # ev.ident == wake_r -> tylko wybudzenie (stop)
-                if fs_changed:
-                    self.scan_once()
-                if reopen:
-                    # folder przeniesiony/usuniety -> sprobuj otworzyc ponownie
-                    try:
-                        os.close(dir_fd)
-                        dir_fd = os.open(self.watch_dir, open_flags)
-                        kq.control([select.kevent(
-                            dir_fd, filter=select.KQ_FILTER_VNODE,
-                            flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-                            fflags=vnode_flags)], 0, 0)
-                        self.scan_once()
-                    except OSError as e:
-                        self.log.log(f"kqueue: folder zniknal ({e}) — fallback.")
-                        return False
+                    if ev.ident == wake_r:
+                        continue
+                    dirpath = self._fd_to_dir.get(ev.ident)
+                    if dirpath is None:
+                        continue
+                    if ev.fflags & (select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME):
+                        gone.append(ev.ident)
+                    else:
+                        changed.add(dirpath)
+                for dirpath in changed:
+                    for sd in self._scan_dir(dirpath):
+                        self._add_subtree(kq, open_flags, vnode_flags, sd)
+                for fd in gone:
+                    self._unregister_fd(fd)
         except Exception as e:  # noqa
             self.log.log(f"kqueue: blad petli ({e}) — fallback na polling.")
             return False
         finally:
-            for fd in (dir_fd, wake_r, wake_w):
+            for fd in list(self._fd_to_dir):
+                self._unregister_fd(fd)
+            for fd in (wake_r, wake_w):
                 try:
                     os.close(fd)
                 except OSError:
@@ -575,6 +673,13 @@ class Watcher:
             except Exception:
                 pass
         return True
+
+    def _add_subtree(self, kq, open_flags, vnode_flags, root: str) -> None:
+        """Rejestruje nowo powstaly podfolder (i jego podfoldery) oraz przetwarza
+        pliki, ktore juz sie w nim znajduja (sa dla nas nowe)."""
+        for d in self._dirs_of_root(root):
+            self._register_dir(kq, open_flags, vnode_flags, d)
+            self._process_existing_as_new(d)
 
 
 def resolve_config_path() -> str:

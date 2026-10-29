@@ -59,20 +59,32 @@ def open_settings(root, cfg: dict, cfg_path: str, on_saved, first_run=False):
     remote_v = add_entry("Zdalny folder:", ftp.get("remote_dir", ""))
     base_v = add_entry("Base URL:", cfg.get("public_base_url", ""))
 
-    # Obserwuj + przeglądaj
-    ttk.Label(frm, text="Obserwuj:").grid(row=row, column=0, sticky="e",
+    # Obserwuj — lista folderów + Dodaj/Usuń
+    ttk.Label(frm, text="Obserwuj:").grid(row=row, column=0, sticky="ne",
                                           padx=(0, 8), pady=3)
-    watch_v = tk.StringVar(value=str(cfg.get("watch_dir", "")))
-    ttk.Entry(frm, textvariable=watch_v, width=30).grid(row=row, column=1,
-                                                        sticky="we", pady=3)
+    folders = tk.Listbox(frm, height=4, width=46)
+    for d in core.watch_dirs(cfg):
+        folders.insert("end", d)
+    folders.grid(row=row, column=1, sticky="we", pady=3)
+    fbtns = ttk.Frame(frm)
+    fbtns.grid(row=row, column=2, sticky="nw", padx=(6, 0))
 
-    def browse():
-        d = filedialog.askdirectory(parent=win, title="Wybierz folder")
-        if d:
-            watch_v.set(d)
+    def add_folder():
+        d = filedialog.askdirectory(parent=win, title="Dodaj folder")
+        if d and d not in folders.get(0, "end"):
+            folders.insert("end", d)
 
-    ttk.Button(frm, text="Przeglądaj…", command=browse).grid(row=row, column=2,
-                                                             sticky="we", padx=(6, 0))
+    def remove_folder():
+        for i in reversed(folders.curselection()):
+            folders.delete(i)
+
+    ttk.Button(fbtns, text="Dodaj…", command=add_folder).pack(fill="x")
+    ttk.Button(fbtns, text="Usuń", command=remove_folder).pack(fill="x", pady=(4, 0))
+    row += 1
+
+    recursive_v = tk.BooleanVar(value=core.is_recursive(cfg))
+    ttk.Checkbutton(frm, text="Przeszukuj podfoldery",
+                    variable=recursive_v).grid(row=row, column=1, sticky="w")
     row += 1
 
     passive_v = tk.BooleanVar(value=bool(ftp.get("passive", True)))
@@ -123,12 +135,16 @@ def open_settings(root, cfg: dict, cfg_path: str, on_saved, first_run=False):
         if port is None:
             set_status("Port musi być liczbą.", error=True)
             return
+        dirs = [d for d in folders.get(0, "end") if d.strip()]
+        if not dirs:
+            set_status("Dodaj przynajmniej jeden folder do obserwacji.", error=True)
+            return
         new_cfg = dict(cfg)
         new_cfg["ftp"] = f
         new_cfg["public_base_url"] = base_v.get().strip()
-        w = watch_v.get().strip()
-        if w:
-            new_cfg["watch_dir"] = w
+        new_cfg["watch_dirs"] = dirs
+        new_cfg["watch_recursive"] = bool(recursive_v.get())
+        new_cfg.pop("watch_dir", None)
         try:
             core.save_config(cfg_path, new_cfg)
         except OSError as e:

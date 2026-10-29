@@ -36,7 +36,8 @@ Menu paska → **Ustawienia FTP…** otwiera okno z polami:
 | **Host / Port / User / Password** &ast; | Dane logowania FTP (hasło → Keychain; puste = bez zmian). |
 | **Zdalny folder** &ast; | Katalog docelowy na serwerze (tworzony, jeśli nie istnieje). |
 | **Base URL** &ast; | Publiczny adres odpowiadający zdalnemu folderowi (bez końcowego `/`). |
-| **Obserwuj** | Folder śledzony pod zrzuty (przycisk **Wybierz…** otwiera wybór folderu). |
+| **Obserwuj** | Lista folderów śledzonych pod zrzuty (jeden na linię; **Dodaj folder…** pozwala wskazać wiele naraz). |
+| **Przeszukuj podfoldery** | Gdy zaznaczone — śledzi też wszystkie podfoldery wskazanych folderów. |
 | **Passive mode / TLS (FTPS)** | Tryb pasywny i szyfrowanie połączenia. |
 | **Uruchamiaj przy logowaniu** | Autostart aplikacji (LaunchAgent). |
 
@@ -66,6 +67,11 @@ Po **Zapisz** plik jest walidowany i stosowany od razu (komentarze nie są zacho
 **WAŻNE** Jeśli używasz monosnapa, pamiętaj by scereenshoty zapisywać w wybranym folderze, a nie klikać "upload"
 
 ## Historia wersji
+
+### v1.1.0
+- **Wiele obserwowanych folderów** oraz opcja **„Przeszukuj podfoldery"**
+  (rekurencyjnie) — w formularzu i w configu (`watch_dirs`, `watch_recursive`).
+- Dotyczy macOS i Windows. Stary `watch_dir` nadal działa (zgodność wsteczna).
 
 ### v1.0.1
 - Śledzenie folderu **zdarzeniowe** (kqueue) zamiast odpytywania — zero wybudzeń

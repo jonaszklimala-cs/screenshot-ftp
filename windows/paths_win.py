@@ -33,7 +33,8 @@ def default_log_path() -> str:
 def default_config() -> dict:
     c = copy.deepcopy(core.DEFAULT_CONFIG)
     # Windows 11: Win+PrtScn zapisuje do Pictures\Screenshots
-    c["watch_dir"] = str(Path.home() / "Pictures" / "Screenshots")
+    c["watch_dirs"] = [str(Path.home() / "Pictures" / "Screenshots")]
+    c.pop("watch_dir", None)
     c["log_file"] = default_log_path()
     return c
 
